@@ -35,7 +35,11 @@ export class Resources {
         for (const k of ['id', 'kind', 'uri', 'revision', 'createdAt', 'updatedAt', 'ownerSpaceId', 'status'])
             delete data[k];
         data.title = input.title.trim();
+        if(data.citations){assert(Array.isArray(data.citations)&&data.citations.length<=1000,'引用过多');for(const c of data.citations){assert(typeof c.id==='string'&&typeof c.excerpt==='string','无效引用');parseURI(c.targetUri);}}
         if (kind === 'object') {
+            if(data.asset){assert(Number.isSafeInteger(data.asset.size)&&data.asset.size>=0&&data.asset.size<=100*1024*1024,'无效原件大小');assert(typeof data.asset.id==='string'&&/^asset_[a-zA-Z0-9-]+$/.test(data.asset.id),'无效原件');assert(typeof data.asset.mime==='string'&&/^(image\/(png|jpeg|webp|gif)|application\/[a-z0-9.+-]+|(audio|video)\/[a-z0-9.+-]+)$/.test(data.asset.mime),'无效媒体类型');}
+            if(data.annotations){assert(Array.isArray(data.annotations)&&data.annotations.length<=500,'标注过多');const ids=new Set();for(const a of data.annotations){assert(typeof a.id==='string'&&/^annotation_[a-zA-Z0-9-]+$/.test(a.id)&&!ids.has(a.id),'无效标注 ID');ids.add(a.id);assert(typeof a.text==='string'&&a.text.length<=5000,'无效标注内容');const v=a.selector;assert(v&&['region','page','time','block'].includes(v.type),'无效标注位置');if(v.type==='region'){for(const k of ['x','y','width','height'])assert(Number.isFinite(v[k])&&v[k]>=0&&v[k]<=1,'无效图片区域');assert(v.width>0&&v.height>0&&v.x+v.width<=1.001&&v.y+v.height<=1.001,'区域超界');}if(v.type==='page')assert(Number.isInteger(v.page)&&v.page>0,'无效页码');if(v.type==='time')assert(Number.isFinite(v.start)&&v.start>=0,'无效时间');if(v.type==='block')assert(typeof v.blockId==='string','无效段落');}}
+            if(data.taskIds){assert(Array.isArray(data.taskIds)&&data.taskIds.length<=500,'关联任务过多');for(const id of data.taskIds){const task=this.get(id);assert(task.kind==='task'&&task.projectId===data.projectId,'关联任务不属于当前项目');}}
             data.content = String(data.content ?? '');
             data.format = data.format ?? 'markdown';
             assert(['markdown', 'text', 'json'].includes(data.format), 'Unsupported format');
@@ -44,6 +48,10 @@ export class Resources {
             const parts = data.content.split(/\n\s*\n/).filter(x => x.trim());
             const used = new Set();
             data.blocks = parts.map((text, i) => { const explicit = input.blocks?.[i]; let match = explicit?.id && old.find(x => x.id === explicit.id); match ??= old.find(x => x.text === text && !used.has(x.id)); const id = match?.id ?? 'block_' + hash(text + '|' + i).slice(0, 12); used.add(id); return { id, text }; });
+            if(data.extracted?.segments && data.content===data.extracted.segments.map(x=>x.text).join('\n\n')) {
+                let start=0;const segments=data.extracted.segments.map(x=>{const v={...x,offset:start};start+=x.text.length+2;return v;});let cursor=0;
+                data.blocks=data.blocks.map(b=>{const offset=data.content.indexOf(b.text,cursor);cursor=offset+b.text.length;const segment=segments.find(x=>offset>=x.offset&&offset<x.offset+x.text.length);return {...b,...segment?.page?{locator:{page:segment.page}}:segment?.start!==undefined?{locator:{time:segment.start}}:{}};});
+            }
             data.contentHash = hash(data.content);
             if (previous && previous.contentHash !== data.contentHash && data.summary)
                 data.summary = { ...data.summary, stale: true };
@@ -61,6 +69,7 @@ export class Resources {
                 data.summary = { ...data.summary, stale: true };
         }
         if (kind === 'project') {
+            if(previous)assert(previous.leadBotId===data.leadBotId,'项目负责人固定，不支持更换或交接',409,'FIXED_PROJECT_LEAD');
             data.goal = String(data.goal ?? '');
             data.phase = String(data.phase ?? '未开始');
             data.memberBotIds = Array.isArray(data.memberBotIds) ? [...new Set(data.memberBotIds)] : [];
@@ -93,10 +102,12 @@ export class Resources {
             }
         }
         if (kind === 'bot') {
+            assert(data.avatar==null||['redhat','curly','bun','cap'].includes(data.avatar),'未知头像');
+            if(data.appearanceDescription!==undefined)assert(typeof data.appearanceDescription==='string'&&data.appearanceDescription.length<=2000,'形象描述过长');
             data.role = String(data.role ?? 'worker');
             data.instructions = String(data.instructions ?? '');
             data.model = String(data.model ?? '');
-            data.tools = Array.isArray(data.tools) ? data.tools.map(String) : ['knowledge.*', 'collection.*', 'resource.*', 'task.*', 'view.*', 'widget.*', 'bot.*', 'project.get', 'intent.confirm', 'web.fetch', 'file.read', 'file.write', ...(data.role === 'lead' || data.role === 'global' ? ['project.*'] : [])];
+            data.tools = Array.isArray(data.tools) ? data.tools.map(String) : ['knowledge.*', 'collection.*', 'resource.*', 'task.*', 'bot.*', 'project.get', 'intent.confirm', 'web.fetch', 'file.read', 'file.write', ...(data.role === 'lead' || data.role === 'global' ? ['project.*','view.*','widget.*'] : [])];
             data.skills = Array.isArray(data.skills) ? data.skills.map(String) : [];
             // Legacy maxSteps data is preserved for compatibility but no longer limits execution.
         }
@@ -104,6 +115,12 @@ export class Resources {
             data.blocks = Array.isArray(data.blocks) ? data.blocks : [];
             assert(data.blocks.length <= 100, '视图模块上限 100');
             assert(new Set(data.blocks.map(b => b.id)).size === data.blocks.length, '模块 ID 不可重复');
+            data.layoutMode ??= 'grid';
+            assert(['grid','article','canvas','gallery'].includes(data.layoutMode), 'Invalid view layout');
+            data.edges ??= [];
+            assert(Array.isArray(data.edges) && data.edges.length <= 500 && new Set(data.edges.map(e=>e.id)).size===data.edges.length, 'Invalid edges');
+            for(const e of data.edges) assert(typeof e.id==='string' && /^[\w.-]{1,100}$/.test(e.id) && data.blocks.some(b=>b.id===e.source) && data.blocks.some(b=>b.id===e.target), 'Invalid edge endpoints');
+            for(const b of data.blocks) if(b.layout) {if(b.layout.parentId){const seen=new Set([b.id]);let current=b;while(current.layout?.parentId){assert(!seen.has(current.layout.parentId),'分组循环');seen.add(current.layout.parentId);current=data.blocks.find(n=>n.id===current.layout.parentId);assert(current,'分组父节点不存在');}} for(const k of ['x','y','width','height']) if(b.layout[k]!==undefined) assert(Number.isFinite(b.layout[k]) && Math.abs(b.layout[k])<=100000, 'Invalid layout'); }
             data.mode = data.mode ?? 'live';
             assert(['live', 'snapshot'].includes(data.mode), 'Unknown view mode');
             for (const b of data.blocks) {
@@ -239,7 +256,9 @@ export class Resources {
             r = { ...r, ...JSON.parse(v.data), revision: p.rev, uri: uri(r.kind, r.id, { rev: p.rev }), isHistorical: true };
         }
         if (p.anchor) {
-            if (p.anchor.startsWith('t=')) {
+            if (p.anchor.startsWith('annotation_')) { const annotation=(r.annotations??[]).find(a=>a.id===p.anchor);assert(annotation,'标注不存在',404);r={...r,selection:annotation}; }
+            else if (p.anchor.startsWith('page=')) { const page=Number(p.anchor.slice(5));assert(Number.isInteger(page)&&page>0,'Invalid page anchor');r={...r,selection:{page}}; }
+            else if (p.anchor.startsWith('t=')) {
                 const time = Number(p.anchor.slice(2));
                 assert(Number.isFinite(time) && time >= 0, 'Invalid time anchor');
                 r = { ...r, selection: { time } };

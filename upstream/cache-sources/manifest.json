@@ -1,0 +1,63 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "e8f7b93a344964de3dca1ace9e72b6e4d6de87cb",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "packages/core/agent-loop/src/runtime-context.ts",
+      "blob": "6a1a48f263eada036a212573d1a47cd17b7da00a",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/core/agent-loop/src/runtime-context.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/config.ts",
+      "blob": "3792d9694a5cc494407b03b3fb054a52d0a951d7",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/compaction/compaction-basic/src/config.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/index.ts",
+      "blob": "096fa72fe46a1a715a3a34a2a109b4dc379de42b",
+      "read": "pressure and overflow paths; full source archived",
+      "archive": "upstream/cache-sources/packages/compaction/compaction-basic/src/index.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/region.ts",
+      "blob": "7b3d77d299881fa47b8dfdab7fae0a92cd7d462c",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/compaction/compaction-basic/src/region.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/summarizer.ts",
+      "blob": "6220a53b255abda122be6aca711991c3a1654401",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/compaction/compaction-basic/src/summarizer.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/compaction/compaction/src/tool-pairing.ts",
+      "blob": "ca070851abebd2919a8b06c832b75f72159c1b8d",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/compaction/compaction/src/tool-pairing.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/llm/token-meter/src/estimate.ts",
+      "blob": "ca54abf6b225a251dad09d61cbcbc90dea57dcd2",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/llm/token-meter/src/estimate.ts",
+      "modified": true
+    },
+    {
+      "path": "packages/core/session/src/request-header.ts",
+      "blob": "326165a1bdbdf5aaae53ed94ea5436ab4064f7c2",
+      "read": "full",
+      "archive": "upstream/cache-sources/packages/core/session/src/request-header.ts",
+      "modified": true
+    }
+  ]
+}

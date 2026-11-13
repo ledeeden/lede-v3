@@ -6,16 +6,18 @@
 
 ## 启动
 
-要求 **Node.js 22.16 或以上**。实际验证环境为 Node.js 22.16.0。使用内置 `node:sqlite`，该版本显示实验性提示属于预期现象。
+要求 **Node.js 22.16 或以上**。本轮验证环境为 macOS / Node.js 25.9.0。使用内置 `node:sqlite`，该版本显示实验性提示属于预期现象。
 
 ```sh
 cd lede-v3
+npm ci
+npm run build:web
 npm run check
 npm test
 npm start
 ```
 
-随后打开终端打印的本地地址，默认 `http://127.0.0.1:4217`。**不需要 npm install**：生产运行仅使用 Node 内置能力；插件编译器 TypeScript 5.8.3 已连同许可证放在 `vendor/`。
+随后打开终端打印的本地地址，默认 `http://127.0.0.1:4217`。服务端使用 Node 内置 HTTP/SQLite 与 ZIP/XML 解析依赖；前端构建需要 React、React Flow、PDF.js 与 esbuild，版本固定在 package-lock.json。已生成的浏览器产物放在 web/public/vendor/，构建完成后运行不依赖 CDN。插件编译器 TypeScript 5.8.3 连同许可证保留在 vendor/。
 
 Mac 上也可打开 `START.command`，自动启动服务并打开浏览器。命令文件在解压后没有执行权限时，在该目录运行 `chmod +x START.command DEMO.command`。不要直接以 `file://` 打开 `web/index.html`，它需要本地 API。
 
@@ -33,10 +35,10 @@ Mac 上也可打开 `START.command`，自动启动服务并打开浏览器。命
 
 ## 第一次使用
 
-1. 新建项目，填写名称与目标；系统自动创建该项目的负责人 Bot。
-2. 在资料页导入 Markdown、文本、JSON、CSV 或 HTML，或直接创建知识。将已有集合关联到项目。
+1. 点击新项目，与总助聊清名称与目标；总助创建项目和固定负责人。
+2. 在资料页导入 Markdown、文本、JSON、CSV、HTML、图片、PDF 或音视频，或直接创建知识。将已有集合关联到项目。
 3. 与右侧负责人对话。目标模糊时它可以发起确认卡；用户确认后继续。
-4. 打开「执行团队」配置或添加执行 Bot。负责人也可通过工具创建成员、派活、接收结果与要求补充。
+4. 由负责人通过对话创建成员、派活、接收结果与要求补充；总览显示成员执行、进展、成果、决定和汇报。
 5. 在「进展」查看任务、验收依据与真实 Run 日志；在「成果」查看产物。
 6. 在项目中生成或创建视图。点击表格行、知识段落或插件的数据项，选择会进入负责人上下文。
 7. 预制组件表达不了时，让 Bot 提案代码插件；在「视图插件」编译、预览并确认注册后挂载。
@@ -62,13 +64,13 @@ Mac 上也可打开 `START.command`，自动启动服务并打开浏览器。命
 | Agent | 流式模型协议、Tools、Turn/Step、持久 Inbox、插话/排队、工具账本、取消、重复调用提醒、确认卡、上下文摘要 |
 | Bot 协作 | 长期身份与独立项目会话、消息去重、派活树、等待、结果回传与唤醒、跨项目总助路由 |
 | 恢复 | 等待关系保留、持久事件重建、崩溃后未知工具结果显式化、人工检查后继续 |
-| 视图 | 八类内置组件、Live/Snapshot、数据绑定、增量 patch/CAS、多项目挂载、固定入口、画布位置、选择回传 |
+| 视图 | 基础组件和 16 种阅读/分析表达、Live/Snapshot、数据绑定、增量 patch/CAS、多项目挂载、固定入口、React Flow 画布、连线/分组/锁定/整理撤销、阅读布局/图墙、选择回传 |
 | 插件 | JS/TS/TSX、Manifest/Schema、编译、隔离 iframe 预览、用户批准、不可变版本、停用、交互状态持久化 |
 | 本地服务 | SQLite WAL、单写入宿主锁、SSE 实时事件与重连、后台摘要/索引作业、业务 JSON 导出 |
 
 ## 设计与代码组织
 
-界面保留第三版的深色中性色、248px 导航、项目工作区与负责人侧栏；使用从 Figma 实际导出的 SVG 图标。前端是**原生 ES Modules + CSS**，不是 React；插件的 TSX 编译到内置 `h()` DOM 工厂，也不依赖 React。这里的选择让应用无需联网安装依赖即可启动。设计映射见 [设计实现记录](docs/DESIGN.md)。
+界面保留第三版的深色中性色、248px 导航、项目工作区与负责人侧栏；使用从 Figma 实际导出的 SVG 图标。前端主体保留**原生 ES Modules + CSS**，画布以 React Flow 独立挂载；插件的 TSX 编译到内置 `h()` DOM 工厂，也不依赖 React。React Flow 与 PDF.js 构建为本地静态资源，未迁移 API、URI 或业务对象模型。设计映射见 [设计实现记录](docs/DESIGN.md)。
 
 ```text
 server/runtime/      Agent、Inbox、去重、派活与恢复
@@ -86,11 +88,11 @@ scripts/             启动与检查
 
 ## 测试与已知边界
 
-交付构建通过 **38 项 Node 自动化测试 + 20 项浏览器交互场景**，包括真实本地 HTTP/SQLite/模型流式协议、A→B→C 回传、动态插件实际渲染和 SIGKILL 故障恢复。详细证据在 `tests/artifacts/` 和 [测试报告](docs/TEST-REPORT.md)。
+2026-11-13 构建通过 **75 项 Node 自动化测试 + 原有 22 项浏览器交互场景**，另有新增设计浏览器套件覆盖画布分组/撤销、PDF/图片/音频、组件库、头像与 1440×1024 / 390px 布局，包括真实本地 HTTP/SQLite/模型流式协议、A→B→C 回传、动态插件实际渲染和 SIGKILL 故障恢复。详细证据在 `tests/artifacts/` 和 [测试报告](docs/TEST-REPORT.md)。
 
-**测试模型是明确标记的确定性 HTTP fixture，不是真实大模型**；交付时没有你的 API Key，所以没有执行真实服务商的长期任务与内容质量验收。生产没有 mock AI 模式。浏览器在此环境有导航策略限制，DOM 测试通过本地 HTTP bridge 完成，没有修改策略；真实 Mac 普通浏览器导航、完整生产 CSP 与厂商 API 必须在你的环境补验。
+**测试模型是明确标记的确定性 HTTP fixture，不是真实大模型**；交付时没有你的 API Key，所以没有执行真实服务商的长期任务与内容质量验收。生产没有 mock AI 模式。本轮已在 macOS 原生 Chrome/Chromium、本地 HTTP 与生产 CSP 下完成浏览器验证，没有修改浏览器策略。厂商 API 内容质量与长期任务仍需真实配置后验收。
 
-本版不是“完整 DSH 成熟度”的承诺。尚未包含：MCP/ACP 接入、外部 CLI Agent、二进制 PDF/音视频解析、原生 macOS 安装包、多人权限/云同步、独立向量 ANN、Reranker、插件市场。完整边界见 [已知限制](docs/KNOWN-LIMITATIONS.md)。
+本版不是“完整 DSH 成熟度”的承诺。尚未包含：MCP/ACP 接入、外部 CLI Agent、旧 Office/EPUB 专门解析、原生 macOS 安装包、多人权限/云同步、独立向量 ANN、专用 cross-encoder 重排服务、插件市场。完整边界见 [已知限制](docs/KNOWN-LIMITATIONS.md)。
 
 ## 数据与备份
 
@@ -117,4 +119,14 @@ LEDE_HOME="$HOME/Projects/lede-data" PORT=4317 npm start
 
 离线打开 `delivery/index.html` 可以浏览本次交付说明与真实运行截图；它不是应用入口。
 
-项目持续性使用说明与边界：[长期记忆、跨轮目标与负责人交接](docs/PROJECT-CONTINUITY.md)。
+项目持续性使用说明与边界：[内部记忆与跨轮目标（负责人固定）](docs/PROJECT-CONTINUITY.md)。
+
+## 当前设计实现
+
+详见 [2026-11-13 设计实现与验收](docs/DESIGN-IMPLEMENTATION-20261113.md)。
+
+- 图片/PDF/音视频原件保存到 `blobs/`；图片框选、PDF 页/文字、音视频时间标注均可作为版本化引用。
+- PDF 在浏览器本地提取文字；图片识别使用支持图像输入的聊天模型；转写在设置中单独配置兼容服务。无服务或失败时不生成模拟结果。
+- `npm run test:design-ui` 运行新增原生浏览器测试（先安装 Playwright Chromium）；完整旧版套件可按测试记录的原生 Chrome 命令运行。
+
+项目总览按 Figma 168:5858 实现。目标与项目信息通过对话维护，不提供目标、记忆、交接表单。负责人用 `project.report` 发布带日期、摘要和来源的汇报，用 `project.overview` 绑定独立 ViewSpec；自动 L0/L1 不改写看板。

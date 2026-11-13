@@ -1,4 +1,4 @@
-import { uri } from '../../shared/uri.mjs';
+import { uri, parseURI } from '../../shared/uri.mjs';
 import { assert } from '../../shared/schema.mjs';
 
 // External model IO, outside SQLite transactions. Ranking is relevance, not truth assessment.
@@ -35,7 +35,7 @@ export function assembleContext(resources, hits, { maxChars = 12000, neighbors =
         const content = text.slice(0, Math.min(remaining, 2400));
         const clipped = content.length < text.length;
         truncated ||= clipped;
-        passages.push({ uri: ref, resourceId: r.id, revision: r.revision, anchor, level, title: r.title, source: r.source ?? null, role, via, text: content, truncated: clipped });
+        passages.push({ uri: ref, resourceId: r.id, revision: r.revision, anchor, level, title: r.title, source: r.source ?? null, locator:r.blocks?.find(b=>b.id===anchor)?.locator??null, role, via, text: content, truncated: clipped });
         usedChars += content.length;
     };
     // Reserve budget for actual hits before adjacent/contextual material.
@@ -53,13 +53,16 @@ export function assembleContext(resources, hits, { maxChars = 12000, neighbors =
     const relatedSeen = new Set(hits.map(h => h.resourceId));
     for (const hit of hits) {
         if (relatedCount >= relatedLimit) break;
-        for (const edge of resources.related(hit.resourceId)) {
+        const current=resources.get(hit.resourceId);
+        const edges=[...resources.related(hit.resourceId),...(current.citations??[]).map(c=>({source:current.id,target:parseURI(c.targetUri).id,targetUri:c.targetUri}))];
+        for (const edge of edges) {
             const id = edge.source === hit.resourceId ? edge.target : edge.source;
             if (relatedSeen.has(id) || (scopeIds && !scopeIds.has(id))) continue;
-            const r = resources.maybe(id);
+            let r = resources.maybe(id);
             if (!r || r.status !== 'active' || !['object', 'collection'].includes(r.kind)) continue;
             relatedSeen.add(id); relatedCount++;
-            const block = r.blocks?.[0];
+            if(edge.targetUri){try{r=resources.resolve(edge.targetUri);}catch{continue;}}
+            const block = r.selection?.text?r.selection:r.blocks?.[0];
             add(r, block?.id ?? 'members', block?.text ?? r.description, 'reference', hit.uri);
             if (relatedCount >= relatedLimit) break;
         }

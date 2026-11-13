@@ -82,3 +82,7 @@ npm run test:ui
 ## 2026-11-13 项目持续性增量
 
 本机 check 与62项 Node 测试通过；22项原生 Chromium 浏览器场景通过（1440×1024、390×844），包括记忆维护、多阶段目标、负责人交接。记录见 tests/artifacts/continuity-check.txt、continuity-node-tests.txt、ui-report.json。新增模型测试为确定性 HTTP fixture，不是真实提供方验收。详见 PROJECT-CONTINUITY.md。
+
+## 沟通页验收（2026-11-13）
+
+Node 全套 104 项通过，check 83 模块无错。隔离 HTTP fixture 经浏览器验证 1440×1024 与 390×1024：左侧沟通入口、固定总助/负责人、隐藏无用户沟通的后台成员、关键消息、发送与接收、确认卡处理、手机返回列表及无横向溢出。浏览器没有修改企业策略，测试内容明确标记，未用真实项目发送测试消息。

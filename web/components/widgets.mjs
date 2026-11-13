@@ -1,3 +1,5 @@
+import {catalogBlock} from './catalog.mjs';
+import {assetURL} from '../media.mjs';
 import { api, esc, icon, md, badge, date, resourceRoute } from '../api.mjs';
 export const sandboxCleanups = new Set();
 export function clearSandboxes() { for (const fn of sandboxCleanups)
@@ -37,7 +39,9 @@ export function sandbox(host, { widget, props = {}, data, context, state = {}, o
     return dispose;
 }
 export function blockHTML(block) {
+    const builtin=catalogBlock(block);if(builtin!==null)return builtin;
     const props = block.props ?? {}, data = block.resolvedData ?? block.data ?? [], rows = Array.isArray(data) ? data : [data];
+    if (block.type === 'media') { const x=rows[0];return x?.asset ? `<a href="${resourceRoute(x.uri)}">${x.asset.mime.startsWith('image/')?`<img class="media-thumbnail" src="${assetURL(x.asset)}" alt="${esc(x.title)}">`:`<span>${esc(x.title)} · ${esc(x.asset.mime)}</span>`}</a>` : '<p>原件不可用</p>'; }
     if (block.type === 'markdown')
         return `<div class="markdown">${md(props.text ?? (typeof data === 'string' ? data : data.content ?? ''))}</div>`;
     if (block.type === 'metric')

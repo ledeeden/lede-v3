@@ -1,3 +1,5 @@
+> 2026-11-13 产品规则更新：项目负责人固定，不支持更换或交接。下文涉及交接的旧实现仅保留为历史说明。目标与记忆通过对话维护，不再暴露独立编辑入口。
+
 # 项目持续性：记忆、目标与负责人交接
 
 2026-11-13。参考 DS-Bot `a66cc737cfb6c3d8a2597e748cded6cab1206dd3`，Modified，Apache-2.0。来源文件与 blob SHA 在 upstream/manifest.json。未引入群聊、Cordis 或第二套 Agent 内核。

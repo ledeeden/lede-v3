@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="10.92" height="10.92" viewBox="0 0 10.92 10.92" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icon/grid" clip-path="url(#clip0_0_130)">
+<path id="Vector" d="M1.365 1.365H4.55V4.55H1.365V1.365Z" stroke-width="1.248" stroke-linecap="round" stroke-linejoin="round" stroke="#B4B8BF"/>
+<path id="Vector_2" d="M6.37 1.365H9.555V4.55H6.37V1.365Z" stroke-width="1.248" stroke-linecap="round" stroke-linejoin="round" stroke="#B4B8BF"/>
+<path id="Vector_3" d="M1.365 6.37H4.55V9.555H1.365V6.37Z" stroke-width="1.248" stroke-linecap="round" stroke-linejoin="round" stroke="#B4B8BF"/>
+<path id="Vector_4" d="M6.37 6.37H9.555V9.555H6.37V6.37Z" stroke-width="1.248" stroke-linecap="round" stroke-linejoin="round" stroke="#B4B8BF"/>
+</g>
+<defs>
+<clipPath id="clip0_0_130">
+<rect width="10.92" height="10.92" fill="white"/>
+</clipPath>
+</defs>
+</svg>

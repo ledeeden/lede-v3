@@ -114,3 +114,29 @@ Lede 以 Session 为隔离键，使用进程内 Map，整批工具结果后写�
 固定 DS-Bot SHA 仍为 `a66cc737cfb6c3d8a2597e748cded6cab1206dd3`。参考 `memory-review.js` 的用户来源/游标/审查语义、`memory-entries.js` 的固定/到期/秘密拒绝、`goals.js` 的阶段验收与空闲驱动、`parts.js` 的交接包/用户原话/历史入口设计。实际阅读范围和 blob SHA 见 manifest。
 
 Modified：记忆和阶段目标属于 Project，阶段复用业务 Task；SQLite CAS、原子回执、同步交接包替代上游文件与 room.goal。只采用部分设计，没有移植完整记忆整理、群聊 Goal 或 Session 轮换系统。负责人换任使用新项目会话，忙碌时拒绝切换；重启后目标等待用户核对恢复。具体接口和限制见 PROJECT-CONTINUITY.md。
+
+## 2026-11-13 前端与原件依赖
+
+- React / React DOM / @xyflow/react / @xyflow/system：仅画布 React 岛，不改变原生页面 API 或插件 ABI。
+- PDF.js：本地 worker、字体、CMap 与文字层；文字层 CSS 从安装版本提取，保留 Apache-2.0 许可。
+- fflate / fast-xml-parser：Office/ZIP 有界内容解析；本地适配实现不是上游完整文档编辑器。
+- 精确版本见 package-lock.json，许可汇总见 licenses/web-dependencies.txt。修改标记：本项目新增适配层；不宣称原封不动 SDK。
+- Bot SVG 原件导出自用户 Figma 文件 roN4ySdKkS8eYopaKXkyFD，节点 124:5500；资源导出前缀 https://www.figma.com/api/mcp/asset/b1fff237-bdf4-43c8-8ee4-4f1aaffd41f0 ，文件 avatar-imgArt*.svg 保留实际矢量资产，未伪称开源上游素材。
+
+## 缓存与上下文源码移植（2026-11-13）
+
+固定 Harness SHA 不变。新增 runtime-context、request-header、token-meter estimate 与 compaction-basic 的策略/区间/摘要/溢出链路移植；源码快照和 Blob SHA 在 upstream/cache-sources/manifest.json。Modified：SQLite 持久事件和 checkpoint 替代 Cordis Surface，Chat Completions 使用无历史中系统/工具更新能力分支；缩放默认 headroom，保留实际模型与 effort，补充用户原话和严格纯文本摘要检查。完整对应表、验证和适配边界见 [CACHE-CONTEXT.md](CACHE-CONTEXT.md)。旧文中“没有移植完整动态 PromptAssembly / Request Surface”指通用 SDK 与其他协议能力，不能理解成当前仍使用每步改写前置快照的旧实现。
+
+## Bot 职责约束（2026-11-13）
+
+Lede 自有适配：运行时按总助、项目负责人、执行成员注入职责合同，并对总助工具和项目管理工具实施角色过滤；定义与执行入口一致。未新增上游 SDK 或调度引擎。详见 [BOT-ROLES.md](BOT-ROLES.md)。
+
+## 压缩与截断恢复对齐（2026-11-13）
+
+参考 Harness 固定提交 `39163dd30f703a79079e2d2446545cff3c453738`，MIT © DeepSeek，完整读取的源码及 blob SHA 见 `upstream/recovery-sources/manifest.json`。Modified：保留 Lede 的 SQLite、Chat Completions 和 Task/Work 边界。
+
+- 普通 pre-step 压缩失败记录 warning，保留历史并继续；取消仍立即生效。强制 overflow 恢复只有实际缩小后才允许有限重试；即使后续摘要失败，已持久化的工具裁剪仍算有效缩小。
+- 超过 8192 Unicode 码点的工具返回保留前 4096、后 1024 码点。Lede 适配为 context/tool-pruned 事件，不覆盖原 tool/result、不拆 tool-call/result；标记给出原 session event URI。重启可重建，裁剪幂等。
+- 摘要输出预算不再绑定普通回复的 4096 上限。默认随本地 headroom（窗口的 10%，最大 8192），显式 compaction.maxTokens 优先；这是小窗口适配，不盲目套用上游 65536。模型截断的摘要仍不接受。
+- 提供方 finish=length 优先于部分工具参数 JSON 校验，交由内核记录 truncated 与未执行结果；不会执行半截工具，也不自动重放写操作。
+- 上游可选的 tool-result-pruner 在 Lede 压力/overflow 路径启用；未整体引入插件宿主、未宣称所有上游恢复插件均已移植。

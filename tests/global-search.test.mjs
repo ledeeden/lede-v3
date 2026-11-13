@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture,call} from './helpers.mjs';
+import {createProject} from '../server/tools.mjs';
+import {globalSearch,parseSearch} from '../server/services/global-search.mjs';
+test('global search returns all resource kinds, persistent messages, filters, exact counts and versioned hits',async t=>{
+ const app=await fixture(t),{s,r}=app,p=createProject(r,{title:'搜索测试项目',goal:'价格研究'});
+ const object=r.create('object',{title:'价格报告',category:'report',content:'年付价格 59\n\n其他内容'},{projectId:p.id});
+ const collection=r.create('collection',{title:'价格集合',description:'年付价格'});r.member(collection.id,object.id);r.link(p.id,collection.id);
+ r.create('object',{title:'价格决策',category:'decision',content:'价格选择'},{projectId:p.id});
+ app.plugins.viewCreate({title:'价格视图',blocks:[]});
+ const ss=app.coordinator.session(p.leadBotId,p.id);
+ s.run('INSERT INTO session_events(session_id,type,data,created_at) VALUES(?,?,?,?)',ss.id,'assistant/message',JSON.stringify({message:{content:'价格已核查'}}),new Date().toISOString());
+ const result=globalSearch(s,r,{query:'价格'});assert.equal(result.counts.knowledge,1);assert.equal(result.counts.collection,1);assert.equal(result.counts.decision,1);assert.equal(result.counts.activity,1);assert.equal(result.counts.view,1);assert.ok(result.counts.project>=1);
+ const hit=result.results.find(x=>x.resourceId===object.id);assert.match(hit.uri,/rev=1/);assert.equal(r.resolve(hit.uri).selection.text,'年付价格 59');assert.equal(hit.collections[0].id,collection.id);
+ assert.equal(globalSearch(s,r,{query:'价格 type:报告 project:搜索测试',saved:'yes'}).total,1);
+ assert.equal(globalSearch(s,r,{query:'价格',projectId:p.id,type:'view'}).total,0);
+ const none=globalSearch(s,r,{query:'价格 impossible'});assert.equal(none.total,0);assert.ok(none.related.length);
+ const paged=globalSearch(s,r,{query:'价格',limit:1,offset:1});assert.equal(paged.total,result.total);assert.equal(paged.results.length,1);
+ r.status(object.id,'archived');assert.equal(globalSearch(s,r,{query:'价格',type:'knowledge'}).total,0);
+ r.saveSummary(collection.id,{abstract:'过期独有词',overview:'过期独有词',sourceSignature:r.signature(collection.id)});
+ assert.equal(globalSearch(s,r,{query:'过期独有词'}).total,1);
+ r.member(collection.id,r.create('object',{title:'新成员',content:'其他内容'}).id);
+ assert.equal(globalSearch(s,r,{query:'过期独有词'}).total,0);
+ s.run('UPDATE resources SET updated_at=? WHERE id=?','2000-01-01T00:00:00Z',collection.id);
+ assert.equal(globalSearch(s,r,{query:'价格',type:'collection',time:'month'}).total,0);
+ const response=await call(app,'search/global',{query:'价格'});assert.equal(response.status,200);assert.equal(response.body.mode,'local-text');
+ assert.equal((await call(app,'search/global',{query:1})).status,400);
+});
+test('search syntax handles quoted project names and does not invent semantic matches',()=>{
+ assert.deepEqual(parseSearch('pricing type:报告 project:"英语 App"').terms,['pricing']);assert.equal(parseSearch('project:"英语 App"').project,'英语 App');
+});

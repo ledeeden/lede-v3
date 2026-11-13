@@ -1,3 +1,8 @@
+import { communicationList } from './services/communication.mjs';
+import {ResearchSummaries} from './services/research-summaries.mjs';
+import {globalSearch} from './services/global-search.mjs';
+import {ProjectWorkflow} from './services/project-workflow.mjs';
+import {References} from './services/references.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -12,6 +17,7 @@ import { Memory } from './services/memory.mjs';
 import { ProjectContinuity } from './runtime/project-continuity.mjs';
 import { UsageLedger } from './services/usage.mjs';
 import { Providers } from './services/providers.mjs';
+import { Assets } from './services/assets.mjs';
 import { Plugins } from './services/plugins.mjs';
 import { AgentKernel } from './runtime/kernel.mjs';
 import { BotCoordinator } from './runtime/coordinator.mjs';
@@ -26,10 +32,13 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
     if (providerConfig)
         providers.save(providerConfig);
     const retrieval = new Retrieval(s, r, providers), plugins = new Plugins(s, r), handoffs = new Handoffs(s), coordinator = new BotCoordinator({ s, r, handoffs });
-    const tools = installTools({ s, r, retrieval, plugins, providers, coordinator });
+    const assets = new Assets(s,r), references=new References(s,r);
+    const tools = installTools({ s, r, retrieval, plugins, providers, coordinator, references, assets });
     const kernel = new AgentKernel({ s, r, providers, tools, handoffs });
     coordinator.kernel = kernel;
     kernel.coordinator = coordinator;
+    const workflow = new ProjectWorkflow(s,r,coordinator);
+    coordinator.workflow=workflow; kernel.workflow=workflow;
     const memory = new Memory(s, r, providers), continuity = new ProjectContinuity(s, r, coordinator, memory);
     Object.assign(coordinator, { memory, continuity });
     Object.assign(kernel, { memory, continuity });
@@ -64,6 +73,7 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
         s.run("UPDATE jobs SET state='failed',error=?,updated_at=? WHERE id=?", providers.redact(e.message), now(), id);
         s.event('job.ended', id, { state: 'failed', error: e.message });
     } })(); jobRuns.add(promise); promise.finally(() => jobRuns.delete(promise)); return { id }; }
+    const researchSummaries=new ResearchSummaries(s,r,providers);
     const server = createServer(async (req, res) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Referrer-Policy', 'no-referrer');
@@ -81,7 +91,7 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                 assert(req.headers.origin === origin || req.headers.origin === 'http://localhost:' + server.address().port, 'Cross-origin request rejected', 403);
             if (path.startsWith('/api/')) {
                 if (path === '/api/bootstrap' && req.method === 'GET') {
-                    json(res, { token, version: '0.3.0', demo: s.getMeta('demoMode', false), providers: providers.public(), stats: retrieval.stats(), resources: r.all({ status: 'all' }), widgets: plugins.list().map(w => ({ key: w.key, manifest: w.manifest, state: w.state })), mounts: s.all('SELECT * FROM mounts ORDER BY position'), dataHome: home });
+                    json(res, { token, version: '0.3.0', demo: s.getMeta('demoMode', false), providers: providers.public(), stats: retrieval.stats(), resources: r.all({ status: 'all' }).map(x=>x.kind==='project'?{...x,runtimeState:workflow.snapshot(x.id).state}:x), widgets: plugins.list().map(w => ({ key: w.key, manifest: w.manifest, state: w.state })), mounts: s.all('SELECT * FROM mounts ORDER BY position'), dataHome: home });
                     return;
                 }
                 if (path === '/api/events' && req.method === 'GET') {
@@ -98,9 +108,15 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                     req.on('close', () => { clearInterval(ping); clients.delete(res); });
                     return;
                 }
+                if (path.startsWith('/api/asset/') && ['GET','HEAD'].includes(req.method)) { assert(u.searchParams.get('token')===token || req.headers['x-lede-token']===token,'会话过期',403); await assets.serve(path.slice('/api/asset/'.length),req,res);return; }
                 assert(req.headers['x-lede-token'] === token, '会话过期，请刷新页面', 403, 'CSRF');
+                if (path === '/api/asset/upload' && req.method === 'POST') { json(res,await assets.upload(req,{...Object.fromEntries(u.searchParams),mime:req.headers['content-type']}));return; }
                 const a = req.method === 'GET' ? Object.fromEntries(u.searchParams) : await parse(req);
                 const endpoints = {
+                    'GET /api/references': () => references.list(u.searchParams.get('id')),
+                    'POST /api/reference': () => a.remove ? references.remove(a) : references.add(a),
+                    'POST /api/annotation': () => assets.annotate(a),
+                    'POST /api/asset/extracted': () => assets.extracted(a),
                     'GET /api/resources': () => r.list(a),
                     'POST /api/resource/create': () => a.kind === 'project' ? createProject(r, a.data) : a.kind === 'view' ? plugins.viewCreate(a.data, a.options) : r.create(a.kind, a.data, a.options),
                     'POST /api/resource/update': () => r.update(a.id, a.patch, { baseRevision: a.baseRevision }),
@@ -109,7 +125,11 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                     'GET /api/resource': () => r.get(a.id),
                     'POST /api/resolve': () => r.resolve(a.uri),
                     'GET /api/versions': () => s.all('SELECT revision,created_at FROM versions WHERE resource_id=? ORDER BY revision DESC', a.id),
-                    'GET /api/project': () => r.projectContext(a.id),
+                    'GET /api/activity': () => { assert(r.get(a.projectId).kind==='project','项目不存在'); return s.all("SELECT e.*,s.bot_id FROM session_events e JOIN sessions s ON s.id=e.session_id WHERE s.project_id=? AND "+(a.semantic==='1'?"(e.type='assistant/message' AND trim(coalesce(json_extract(e.data,'$.message.content'),''))<>'' OR e.type='user/message' AND (json_extract(e.data,'$.source.kind') IN ('user','user-correction') OR json_extract(e.data,'$.source.role')='request'))":"e.type IN ('user/message','assistant/message','tool/call','tool/result','context/checkpoint')")+(a.event?" AND e.seq<=?":"")+" ORDER BY e.seq DESC LIMIT 300",a.projectId,...(a.event?[Number(a.event)]:[])).reverse().map(e=>({...e,data:JSON.parse(e.data)})); },
+                    'GET /api/board': () => r.all({kind:'project'}).filter(p=>!a.projectId||p.id===a.projectId).map(p=>({project:p,goal:continuity.goal(p.id),tasks:r.list({kind:'task',projectId:p.id}),items:r.list({kind:'object',projectId:p.id}).filter(x=>['decision','milestone'].includes(x.category)),pending:s.all("SELECT * FROM confirmations WHERE project_id=? AND state='pending'",p.id).map(c=>({...c,data:JSON.parse(c.data)}))})),
+                    'GET /api/project': () => workflow.snapshot(a.id),
+                    'POST /api/task/dispatch': () => { const task=r.get(a.taskId); return coordinator.delegate({fromBotId:r.get(task.projectId).leadBotId,toBotId:a.toBotId??task.assigneeBotId,projectId:task.projectId,taskId:task.id,baseRevision:a.baseRevision,message:a.message||task.description||task.title,request_id:a.request_id}); },
+                    'POST /api/task/review': () => workflow.review(a,'user'),
                     'POST /api/project/link': () => r.link(a.projectId, a.resourceId, a.role),
                     'POST /api/project/unlink': () => r.unlink(a.projectId, a.resourceId),
                     'GET /api/collection': () => ({ collection: r.get(a.id), members: r.collectionMembers(a.id), signature: r.signature(a.id), projects: s.all('SELECT project_id FROM project_links WHERE resource_id=?', a.id).map(x => r.get(x.project_id)) }),
@@ -118,6 +138,8 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                     'GET /api/relations': () => r.related(a.id),
                     'POST /api/relation/delete': () => r.unrelate(a.id),
                     'POST /api/search': () => retrieval.search(a),
+                    'POST /api/search/global': () => globalSearch(s,r,a),
+                    'POST /api/asset/process': () => job('media-extraction',a.id,()=>assets.process(a,providers,jobAbort.signal)),
                     'POST /api/summary': () => job('summary', a.id, () => summarize({ id: a.id, r, providers, signal: jobAbort.signal })),
                     'POST /api/reindex': () => job('embeddings', null, progress => retrieval.reindexVectors({ onProgress: progress, signal: jobAbort.signal })),
                     'GET /api/jobs': () => s.all('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 50').map(j => ({ ...j, data: JSON.parse(j.data) })),
@@ -138,7 +160,9 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                         r.update(p.id, { memberBotIds: [...p.memberBotIds, b.id] }, { baseRevision: p.revision });
                     } return b; },
                     'POST /api/bot/stop': () => coordinator.stopBot(a.botId, a.projectId),
-                    'GET /api/chat': () => coordinator.chat(a.projectId ?? 'global'),
+                    'GET /api/communication': () => { coordinator.session('bot_global','global'); for(const p of r.list({kind:'project'}))coordinator.session(p.leadBotId,p.id); return communicationList(s,r); },
+                    'POST /api/communication/read': () => { const rows=communicationList(s,r),row=rows.find(x=>x.id===a.sessionId);assert(row,'对话不存在',404);assert(Number.isInteger(a.seq)&&a.seq>=0,'无效阅读位置');const last=row.messages.at(-1)?.seq??0;s.setMeta('communication-read:'+row.id,Math.max(s.getMeta('communication-read:'+row.id,0),Math.min(a.seq,last)));return {ok:true}; },
+                    'GET /api/chat': () => coordinator.chat(a.projectId ?? 'global', a.botId),
                     'POST /api/chat': () => coordinator.userMessage(a),
                     'GET /api/runs': () => s.all('SELECT * FROM runs WHERE (? IS NULL OR project_id=?) ORDER BY started_at DESC LIMIT 100', a.projectId ?? null, a.projectId ?? null),
                     'GET /api/run': () => ({ run: s.get('SELECT * FROM runs WHERE id=?', a.id), tools: s.all('SELECT * FROM tool_calls WHERE run_id=? ORDER BY started_at', a.id) }),
@@ -178,7 +202,7 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
             const file = path === '/' ? join(root, 'web/index.html') : path.startsWith('/shared/') ? join(root, path) : join(root, 'web', decodeURIComponent(path));
             const resolved = resolve(file);
             assert(resolved.startsWith(join(root, 'web') + '/') || resolved.startsWith(join(root, 'shared') + '/'), 'Path denied', 403);
-            const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
+            const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.wasm':'application/wasm', '.json': 'application/json' };
             let bytes;
             try {
                 bytes = await readFile(resolved);
@@ -191,7 +215,7 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
                 res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
             }
             else
-                res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+                res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
             res.writeHead(200, { 'content-type': types[extname(resolved)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
             res.end(req.method === 'HEAD' ? undefined : bytes);
         }
@@ -199,7 +223,7 @@ export function createApp({ home = process.env.LEDE_HOME || join(homedir(), '.le
             json(res, { error: { code: error.code ?? 'INTERNAL_ERROR', message: providers.redact(error.message), details: error.details } }, error.status ?? 500);
         }
     });
-    return { s, r, retrieval, plugins, providers, usage, memory, continuity, coordinator, kernel, tools, server, get token() { return token; }, get origin() { return origin; }, async listen() { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); }); origin = 'http://127.0.0.1:' + server.address().port; continuity.recover(); kernel.recover(); return origin; }, async close() { for (const res of clients)
+    return { researchSummaries, s, r, assets, references, retrieval, plugins, providers, usage, memory, continuity, coordinator, kernel, tools, server, get token() { return token; }, get origin() { return origin; }, async listen() { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); }); origin = 'http://127.0.0.1:' + server.address().port; continuity.recover(); kernel.recover(); researchSummaries.recover(); return origin; }, async close() { await researchSummaries.close(); for (const res of clients)
             res.end(); clients.clear(); jobAbort.abort(new Error('本地服务停止')); await kernel.shutdown(); await Promise.allSettled([...jobRuns]); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); s.close(); } };
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -1,0 +1,31 @@
+import {chromium} from '@playwright/test';
+import {createApp} from '../server/index.mjs';
+import {createProject} from '../server/tools.mjs';
+import {mkdtempSync,mkdirSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import assert from 'node:assert/strict';
+const home=mkdtempSync(join(tmpdir(),'lede-project-ui-')),app=createApp({home,port:0});await app.listen();
+const p=createProject(app.r,{title:'项目运转验收（测试）',goal:'比较资料，形成可追溯的研究报告。'}),b=app.r.create('bot',{title:'调研成员',role:'worker',tools:['resource.read']});app.r.update(p.id,{memberBotIds:[p.leadBotId,b.id]},{baseRevision:1});
+const task=app.r.create('task',{title:'收集并比较资料',projectId:p.id,assigneeBotId:b.id,acceptance:'正文与来源'});
+const session=app.coordinator.session(b.id,p.id),lead=app.coordinator.session(p.leadBotId,p.id);
+app.s.sessionEvent(lead.id,'assistant/message',{message:{content:'第一轮做资料比较，已交给调研成员。'}},1,1);
+app.s.sessionEvent(session.id,'assistant/message',{message:{content:'## 执行结果\n\n**已完成并验收**：`lede://object/example`\n\n- 已保存研究草稿\n\n'+ '完整内容与资料说明。'.repeat(60)},runId:'run_ui'},1,1);
+for(let i=0;i<320;i++){app.s.sessionEvent(session.id,'assistant/message',{message:{content:'',tool_calls:[]},runId:'run_ui'},1,i+2);app.s.sessionEvent(session.id,'tool/call',{name:'web.fetch',args:{url:'https://example.com'},callId:'noise'+i},1,i+2);app.s.sessionEvent(session.id,'tool/result',{callId:'noise'+i,result:{text:'原始工具返回'}},1,i+2);}
+const work=app.coordinator.handoffs.open({projectId:p.id,from:p.leadBotId,to:b.id,message:'研究'});const wf=app.coordinator.workflow;wf.attach(work.id,task,b.id);wf.started(work.id);wf.submit({taskId:task.id,baseRevision:app.r.get(task.id).revision,summary:'草稿已保存',content:'测试交付内容',limitations:'仅测试资料'}, {projectId:p.id,bot:b,workId:work.id,runId:'run_ui',callKey:'ui-submit'});app.coordinator.handoffs.taken(work.id);
+const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1024}}),errors=[];page.on('pageerror',e=>errors.push(e.message));mkdirSync('tests/artifacts/project-workflow',{recursive:true});
+try{
+ for(const width of [1440,390]){await page.setViewportSize({width,height:1024});await page.goto(app.origin+'/#project/'+p.id+'/activity');await page.locator('#activity-compose').waitFor();assert.equal(await page.locator('.chat-panel').count(),0);assert.equal(await page.locator('.message-work').count(),0);assert.ok(!(await page.locator('.project-conversation').innerText()).includes('项操作'));assert.ok(!(await page.locator('.project-conversation').innerText()).includes('工作记录'));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.ok((await page.locator('.message-content').nth(1).boundingBox()).height<180);const preview=page.locator('.message-preview').nth(1);assert.equal(await preview.locator('strong').innerText(),'已完成并验收');assert.equal(await preview.locator('code').innerText(),'lede://object/example');assert.ok(!(await preview.innerText()).includes('**'));assert.equal(await preview.locator('h2').innerText(),'执行结果');await page.screenshot({path:`tests/artifacts/project-workflow/activity-${width}.png`});}
+ await page.setViewportSize({width:1440,height:1024});await page.locator('.message-content').nth(1).locator('summary').click();assert.ok(await page.locator('.message-content').nth(1).getAttribute('open')!==null);
+ await page.locator('.activity-members [data-id="'+b.id+'"]').click();await page.locator('.chat-panel').waitFor();assert.ok((await page.locator('.chat-header').innerText()).includes('执行成员'));await page.locator('[data-action=close-member-chat]').click();await page.locator('.chat-panel').waitFor({state:'detached'});assert.equal(await page.locator('.chat-panel').count(),0);
+ await page.locator('[data-action=review-delivery]').click();await page.locator('[name=evidence]').fill('已核对测试内容与交付要求');await page.locator('#dialog-form button[type=submit]').click();await page.waitForTimeout(300);assert.equal(app.r.get(task.id).state,'done');
+ await page.goto(app.origin+'/#project/'+p.id+'/overview');await page.locator('.project-main').waitFor();assert.equal(await page.locator('.chat-panel').count(),0);assert.equal(await page.locator('[data-action=project-goal],[data-action=project-memory],[data-action=project-handoff],[data-action=edit-project]').count(),0);assert.equal(await page.locator('.overview-stats section').count(),4);assert.ok(!(await page.locator('.project-main').innerText()).includes('还没有执行任务'));await page.screenshot({path:'tests/artifacts/project-workflow/overview-1440.png'});
+ await page.setViewportSize({width:390,height:1024});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'tests/artifacts/project-workflow/overview-390.png'});
+ await page.locator('[data-action=project-report]').click();await page.locator('#chat-form textarea').waitFor();assert.match(await page.locator('#chat-form textarea').inputValue(),/project.report/);await page.locator('[aria-label="关闭对话面板"]').click();
+ const report=app.tools.get('project.report').handler({title:'测试项目汇报',content:'## 结论\n\n**测试汇报正文**',abstract:'负责人简报内容',sourceUris:app.r.get(task.id).outputRefs},{projectId:p.id,bot:app.r.get(p.leadBotId),callKey:'ui-report'});
+ await page.reload();await page.getByText('负责人简报内容',{exact:true}).waitFor();await page.locator('.overview-report').click();await page.getByText('测试汇报正文',{exact:true}).waitFor();assert.ok(page.url().includes(encodeURIComponent(report.uri)));
+ const view=app.plugins.viewCreate({title:'负责人维护的看板',blocks:[{id:'curated',type:'markdown',title:'判断',dataSource:{kind:'inline',data:{content:'负责人选择的结构'}}}]},{projectId:p.id});
+ app.tools.get('project.overview').handler({viewId:view.id,baseRevision:app.r.get(p.id).revision},{projectId:p.id,bot:app.r.get(p.leadBotId)});
+ await page.goto(app.origin+'/#project/'+p.id+'/overview');await page.locator('#view-blocks').waitFor();assert.equal(await page.locator('[data-block=curated]').count(),1);
+ assert.deepEqual(errors,[]);console.log('Project UI: compact feed, member drawer, delivery review, completed-task empty state, 1440/390 passed.');
+}finally{await browser.close();await app.close();rmSync(home,{recursive:true,force:true});}

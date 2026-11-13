@@ -22,7 +22,7 @@ export async function modelFixture(t, { respond, embedding, delay = 0 } = {}) {
             const result = await (respond?.(body, id) ?? { content: 'OK' });
             if (result.httpError) {
                 res.writeHead(result.httpError, { 'content-type': 'application/json' });
-                res.end(JSON.stringify({ error: { message: 'fixture error' } }));
+                res.end(JSON.stringify({ error: { message: result.errorMessage ?? 'fixture error', code: result.errorCode } }));
                 return;
             }
             res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });

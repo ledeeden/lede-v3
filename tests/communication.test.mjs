@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture,call} from './helpers.mjs';
+import {createProject} from '../server/tools.mjs';
+import {communicationList} from '../server/services/communication.mjs';
+test('communication excludes background workers and narration, includes direct final replies and pending requests',async t=>{
+ const a=await fixture(t),p=createProject(a.r,{title:'沟通测试'}),b=a.r.create('bot',{title:'后台成员'});a.r.update(p.id,{memberBotIds:[p.leadBotId,b.id]},{baseRevision:1});
+ const ss=a.coordinator.session(b.id,p.id);
+ a.s.sessionEvent(ss.id,'assistant/message',{message:{content:'正在抓源码'},runId:'background'},1,1);
+ let data=(await call(a,'communication')).body;assert.equal(data.length,2);assert.ok(!data.some(x=>x.botId===b.id));
+ a.s.sessionEvent(ss.id,'user/message',{content:'请解释结论',source:{kind:'user'}},2,0);
+ a.s.sessionEvent(ss.id,'assistant/message',{message:{content:'先检查三个文件'},runId:'direct'},2,1);
+ a.s.sessionEvent(ss.id,'assistant/message',{message:{content:'这个项目可以减少人工派活。'},runId:'direct'},2,2);
+ a.s.run('INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)','direct',ss.id,p.id,b.id,null,'succeeded',2,2,'[]',null,null,new Date().toISOString(),new Date().toISOString());
+ data=(await call(a,'communication')).body;const row=data.find(x=>x.botId===b.id);
+ assert.deepEqual(row.messages.map(x=>x.text),['请解释结论','这个项目可以减少人工派活。']);assert.equal(row.unread,1);
+ await call(a,'communication/read',{sessionId:ss.id,seq:row.messages.at(-1).seq});
+ assert.equal(communicationList(a.s,a.r).find(x=>x.id===ss.id).unread,0);
+ const ctx={bot:b,sessionId:ss.id,projectId:p.id,runId:'confirm',callKey:'confirm-test'};
+ await a.tools.execute('intent.confirm',{title:'选择研究方向',do:'是否继续深入代码？'},ctx);
+ assert.equal(communicationList(a.s,a.r).find(x=>x.id===ss.id).pending.length,1);
+});
+test('key updates are durable, bounded, idempotent and separate from raw assistant messages',async t=>{
+ const a=await fixture(t),p=createProject(a.r,{title:'关键汇报'}),bot=a.r.get(p.leadBotId),ss=a.coordinator.session(bot.id,p.id);
+ const ctx={bot,sessionId:ss.id,projectId:p.id,runId:'report',turn:1,step:1},args={request_id:'report-1',kind:'result',text:'已完成初步了解，有两个设计值得借鉴。'};
+ const one=await a.tools.execute('communication.send',args,ctx);assert.ok(Number.isInteger(one.seq));
+ assert.equal((await a.tools.execute('communication.send',args,ctx)).duplicate,true);
+ await assert.rejects(a.tools.execute('communication.send',{...args,text:'不同内容'},ctx),/不同消息/);
+ await assert.rejects(a.tools.execute('communication.send',{...args,request_id:'report-2'},ctx),/合并汇报/);
+ await assert.rejects(a.tools.execute('communication.send',{...args,text:'长'.repeat(1001)},ctx));
+ assert.equal(communicationList(a.s,a.r).find(x=>x.id===ss.id).messages.length,1);
+});

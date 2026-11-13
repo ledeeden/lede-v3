@@ -3,20 +3,27 @@ import { join } from 'node:path';
 import { assert, AppError } from '../../shared/schema.mjs';
 import { hash, uid, now } from '../db.mjs';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { resolveConfig } from '../runtime/compaction-policy.mjs';
+export function providerErrorCode(status, text) {
+    if (![400, 413, 422].includes(status)) return 'PROVIDER_ERROR';
+    let code; try { code=JSON.parse(text).error?.code; } catch {}
+    return ['context_length_exceeded','context_window_exceeded','max_context_length_exceeded'].includes(code) || /maximum context length|context (?:window|length).*(?:exceed|too long)|input tokens.*exceed/i.test(text) ? 'CONTEXT_OVERFLOW' : 'PROVIDER_ERROR';
+}
 const sleep = (ms, signal) => new Promise((resolve, reject) => { const t = setTimeout(resolve, ms); signal?.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason ?? new Error('Canceled')); }, { once: true }); });
 /** OpenAI-compatible Chat Completions and embeddings provider. No mock route in production. */
 export class Providers {
-    constructor(home) { this.meters = new AsyncLocalStorage(); this.context = new AsyncLocalStorage(); this.file = join(home, 'providers.json'); this.config = existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : {}; this.config.chat ??= { baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', apiKey: '', contextWindow: 65536, maxTokens: 4096, timeoutMs: 120000 }; this.config.embedding ??= { baseURL: '', model: '', apiKey: '' }; this.config.allowShell ??= false; this.config.allowNetwork ??= true; }
-    public() { const out = structuredClone(this.config); for (const key of ['chat', 'embedding']) {
+    constructor(home) { this.meters = new AsyncLocalStorage(); this.context = new AsyncLocalStorage(); this.file = join(home, 'providers.json'); this.config = existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : {}; this.config.chat ??= { baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', apiKey: '', contextWindow: 65536, maxTokens: 4096, timeoutMs: 120000 }; this.config.embedding ??= { baseURL: '', model: '', apiKey: '' }; this.config.transcription ??= {baseURL:'',model:'',apiKey:'',responseFormat:'json'}; this.config.allowShell ??= false; this.config.allowNetwork ??= true; }
+    public() { const out = structuredClone(this.config); for (const key of ['chat', 'embedding', 'transcription']) {
         out[key].configured = !!(out[key].baseURL && out[key].model);
         out[key].hasKey = !!out[key].apiKey;
         delete out[key].apiKey;
     } out.chat.configured = !!(this.config.chat.apiKey || this.config.chat.allowAnonymous); return out; }
     save(patch) {
-        for (const kind of ['chat', 'embedding'])
+        for (const kind of ['chat', 'embedding', 'transcription'])
             if (patch[kind]) {
                 const next = { ...this.config[kind], ...patch[kind] };
-                assert(Object.keys(patch[kind]).every(k => ['baseURL', 'model', 'apiKey', 'allowAnonymous', 'contextWindow', 'maxTokens', 'timeoutMs', 'effort'].includes(k)), 'Unknown provider field');
+                assert(Object.keys(patch[kind]).every(k => ['baseURL', 'model', 'apiKey', 'allowAnonymous', 'contextWindow', 'maxTokens', 'timeoutMs', 'effort', 'responseFormat', ...(kind==='chat'?['compaction']:[])].includes(k)), 'Unknown provider field');
+                if(kind==='chat' && next.compaction!==undefined) resolveConfig(next.compaction);
                 if (next.baseURL) {
                     const u = new URL(next.baseURL);
                     assert(['https:', 'http:'].includes(u.protocol) && !u.username && !u.password, 'Invalid provider URL');
@@ -39,7 +46,7 @@ export class Providers {
     configured() { return !!(this.config.chat.apiKey || this.config.chat.allowAnonymous); }
     embeddingConfigured() { const c = this.config.embedding; return !!(c.baseURL && c.model && (c.apiKey || c.allowAnonymous)); }
     embeddingIdentity() { const c = this.config.embedding; return c.model + '@' + hash(c.baseURL).slice(0, 12); }
-    redact(text) { let out = String(text); for (const c of [this.config.chat, this.config.embedding])
+    redact(text) { let out = String(text); for (const c of [this.config.chat, this.config.embedding, this.config.transcription])
         if (c.apiKey)
             out = out.replaceAll(c.apiKey, '[REDACTED]'); return out; }
     endpoint(c, suffix) { const b = c.baseURL.replace(/\/+$/, ''); return b.endsWith('/v1') || b.includes('/api/') || b === 'https://api.deepseek.com' ? b + suffix : b + '/v1' + suffix; }
@@ -92,7 +99,7 @@ export class Providers {
                     continue;
                 }
                 const text = await response.text();
-                throw new AppError(this.redact(`模型请求失败 HTTP ${response.status}: ${text.slice(0, 1000)}`), 502, 'PROVIDER_ERROR');
+                throw new AppError(this.redact(`模型请求失败 HTTP ${response.status}: ${text.slice(0, 1000)}`), 502, providerErrorCode(response.status,text));
             }
             catch (e) {
                 this.ledger?.finish(meter?.id,{state:combined.aborted?'interrupted':'failed',error:this.redact(e.message)});
@@ -102,6 +109,21 @@ export class Providers {
                 await sleep(300 * 2 ** attempt, combined);
             }
         }
+    }
+    async transcribe({bytes,mime,name,signal,usageContext}) {
+        const c=this.config.transcription;
+        assert(c.baseURL&&c.model&&(c.apiKey||c.allowAnonymous),'请先配置转写服务',409,'MODEL_NOT_CONFIGURED');
+        const format=c.responseFormat??'json';assert(['json','verbose_json'].includes(format),'不支持的转写格式');
+        // External IO, no automatic replay: upload may already have been processed on timeout.
+        return this.metered('transcription',usageContext,async()=>{
+            const meter=this.meters.getStore();meter.id=this.ledger?.begin(meter.context,meter.requestId,1,c.model,'transcription');
+            this.ledger?.saveRequest(meter.requestId,{model:c.model,file:{name,mime,size:bytes.length},response_format:format});
+            const form=new FormData();form.set('file',new Blob([bytes],{type:mime}),name);form.set('model',c.model);form.set('response_format',format);
+            const timeout=AbortSignal.timeout(c.timeoutMs??120000),combined=signal?AbortSignal.any([signal,timeout]):timeout;
+            const res=await fetch(this.endpoint(c,'/audio/transcriptions'),{method:'POST',headers:c.apiKey?{Authorization:'Bearer '+c.apiKey}:{},body:form,signal:combined,redirect:'error'});
+            if(!res.ok)throw new AppError(this.redact('转写失败 HTTP '+res.status+': '+(await res.text()).slice(0,1000)),502,'PROVIDER_ERROR');
+            const data=await res.json();assert(typeof data.text==='string','转写响应缺少 text',502);this.captureUsage(data.usage,c.model);this.saveResponseLog(data);return data;
+        });
     }
     async complete(options={}) { return this.metered('chat',options.usageContext,()=>this.completeResponse(options)); }
     async completeResponse({ messages, tools = [], model, effort, signal, onDelta = () => { }, maxTokens } = {}) {
@@ -183,7 +205,7 @@ export class Providers {
         }
         const tool_calls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
         assert(tool_calls.length <= 64 && new Set(tool_calls.map(c => c.id)).size === tool_calls.length, '工具调用重复或超过单步上限', 502, 'PROVIDER_PROTOCOL');
-        for (const call of tool_calls) {
+        for (const call of finish === 'length' ? [] : tool_calls) {
             assert(call.id && call.function.name, 'Incomplete tool call', 502);
             try {
                 JSON.parse(call.function.arguments || '{}');

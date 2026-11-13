@@ -19,7 +19,7 @@ def bridge(_source,req):
     if not path.startswith('/api/'):raise ValueError('Test bridge accepts local /api/* only')
     body=req.get('body');request=urllib.request.Request(BASE+path,data=body.encode() if isinstance(body,str) else None,headers=req.get('headers',{}),method=req.get('method','GET'))
     try:
-        with urllib.request.urlopen(request,timeout=40) as r:return {'status':r.status,'body':r.read().decode(),'headers':{'content-type':r.headers.get('content-type','application/json')}}
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request,timeout=40) as r:return {'status':r.status,'body':r.read().decode(),'headers':{'content-type':r.headers.get('content-type','application/json')}}
     except urllib.error.HTTPError as e:return {'status':e.code,'body':e.read().decode(),'headers':{'content-type':'application/json'}}
 def api(path,data=None):
     token=json.loads(bridge(None,{'url':'/api/bootstrap'})['body'])['token']
@@ -62,7 +62,7 @@ try:
     check('05 全局总助',lambda:(page.locator('[data-action=global]').first.click(),expect(page.locator('.chat-header strong')).to_have_text('总助'),screenshot(page,'05-global.png'),page.locator('[data-action=close-global]').click()))
     check('06 集合与概览',lambda:(go(page,'#collection/'+cid),expect(page.locator('main h1').first).to_be_visible(),screenshot(page,'06-collection.png')))
     check('07 知识对象与 URI',lambda:(go(page,'#resource/'+urllib.parse.quote('lede://object/'+oid,safe='')),expect(page.locator('.document-block').first).to_be_visible(),screenshot(page,'07-knowledge.png')))
-    check('08 插件编译与沙箱挂载',lambda:(go(page,'#plugins'),expect(page.frame_locator('iframe').locator('h3')).to_be_visible(timeout=10000),expect(page.locator('[data-action=register-widget]')).to_be_enabled(timeout=10000),screenshot(page,'08-plugins.png')))
+    check('08 插件编译与沙箱挂载',lambda:(go(page,'#plugins/'+urllib.parse.quote(boot['widgets'][0]['key'],safe='')),expect(page.frame_locator('iframe').locator('h3')).to_be_visible(timeout=10000),expect(page.locator('[data-action=register-widget]')).to_be_enabled(timeout=10000),screenshot(page,'08-plugins.png')))
     check('09 执行团队详情',lambda:(go(page,'#project/'+pid+'/overview'),page.locator('[data-action=team]').click(),expect(page.locator('.team-member')).to_have_count(5),screenshot(page,'09-team.png'),page.locator('button[data-action=close-team]').click()))
     def bot_settings():
         for width,height in [(1440,1024),(390,844)]:
@@ -157,7 +157,7 @@ try:
         go(page,'#project/'+newpid+'/progress');page.locator('[data-action=new-task]').click();page.locator('[name=title]').fill('浏览器任务');page.locator('[name=acceptance]').fill('对象和视图均存在');save(page);page.locator('[data-action=task]').filter(has_text='浏览器任务').click();page.locator('[name=state]').select_option('done');page.locator('[name=evidence]').fill(newobject['uri']);save(page);assert next(x for x in api('resources?kind=task') if x['title']=='浏览器任务')['state']=='done'
     check('任务创建、验收证据与状态更新',task)
     def register():
-        go(page,'#plugins');expect(page.locator('[data-action=register-widget]')).to_be_enabled();page.locator('[data-action=register-widget]').click();save(page);expect(page.locator('[data-action=mount-widget]')).to_be_visible();page.locator('[data-action=mount-widget]').click();page.locator('[name=projectId]').select_option(newpid);page.locator('[name=title]').fill('浏览器漏斗视图');save(page);expect(page.frame_locator('iframe').locator('h3')).to_be_visible();page.frame_locator('iframe').locator('button').first.click();expect(page.locator('.context-chip')).to_be_visible();expect(page.frame_locator('iframe').locator('h3')).to_be_visible();screenshot(page,'10-live-widget.png')
+        go(page,'#plugins/'+urllib.parse.quote(boot['widgets'][0]['key'],safe=''));expect(page.locator('[data-action=register-widget]')).to_be_enabled();page.locator('[data-action=register-widget]').click();save(page);expect(page.locator('[data-action=mount-widget]')).to_be_visible();page.locator('[data-action=mount-widget]').click();page.locator('[name=projectId]').select_option(newpid);page.locator('[name=title]').fill('浏览器漏斗视图');save(page);expect(page.frame_locator('iframe').locator('h3')).to_be_visible();page.frame_locator('iframe').locator('button').first.click();expect(page.locator('.context-chip')).to_be_visible();expect(page.frame_locator('iframe').locator('h3')).to_be_visible();screenshot(page,'10-live-widget.png')
     check('插件预览批准注册、挂载、交互选择',register)
     def configure():
         go(page,'#settings');page.locator('[name="chat.baseURL"]').fill(config['providerConfig']['chat']['baseURL']);page.locator('[name="chat.model"]').fill('fixture-not-a-real-model');page.locator('[name="chat.allowAnonymous"]').check();page.locator('[data-action=test-provider]').click();expect(page.locator('#toast-root')).to_contain_text('模型连接与响应测试通过',timeout=10000)

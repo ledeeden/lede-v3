@@ -45,7 +45,7 @@ test('Harness loop continues beyond legacy caps and records advisory reminders a
         assert.ok(results.every(e => e.seq < reminder.seq));
     }
     assert.ok(peer.calls.some(c => c.body.messages.some(m => m.content?.includes('[重复工具调用提醒]'))));
-    assert.match(a.s.get('SELECT checkpoint FROM sessions WHERE id=?', run.session_id).checkpoint, /测试/);
+    assert.ok(a.kernel.history(run.session_id).some(m=>m.role==='user' && m.content.includes('测试')));
     // A new human instruction resets the chain even in the same session.
     requests = 0;
     await a.coordinator.userMessage({ projectId: p.id, content: '再执行一次' });

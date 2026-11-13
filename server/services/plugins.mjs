@@ -1,3 +1,4 @@
+import {builtinTypes} from '../../shared/blocks.mjs';
 import ts from '../../vendor/typescript.cjs';
 import { assert, ensure, checkSchema, objectSchema, idSchema, AppError } from '../../shared/schema.mjs';
 import { uid, now, hash } from '../db.mjs';
@@ -41,7 +42,7 @@ export class Plugins {
             ensure(w.manifest.propsSchema, b.props ?? {});
         }
         else
-            assert(['markdown', 'metric', 'table', 'cards', 'chart', 'tasks', 'timeline', 'relations'].includes(b.type), '未知组件类型: ' + b.type);
+            assert(builtinTypes.includes(b.type), '未知组件类型: ' + b.type);
     } return input; }
     viewCreate(input, options = {}) { return this.r.create('view', this.validateView(input), options); }
     patchView(id, { baseRevision, operations }) {
@@ -50,7 +51,7 @@ export class Plugins {
         assert(Array.isArray(operations) && operations.length <= 100, '最多 100 个操作');
         let next = structuredClone(v);
         for (const op of operations) {
-            assert(['addBlock', 'updateBlock', 'removeBlock', 'setTitle', 'setMode'].includes(op.op), 'Unsupported view operation');
+            assert(['addBlock', 'updateBlock', 'removeBlock', 'setTitle', 'setMode', 'setEdges', 'setLayout', 'reorderBlocks'].includes(op.op), 'Unsupported view operation');
             if (op.op === 'addBlock') {
                 assert(!next.blocks.some(b => b.id === op.block?.id), '模块已存在');
                 next.blocks.push(op.block);
@@ -58,15 +59,19 @@ export class Plugins {
             if (op.op === 'updateBlock') {
                 const i = next.blocks.findIndex(b => b.id === op.id);
                 assert(i >= 0, '模块不存在');
-                next.blocks[i] = { ...next.blocks[i], ...op.patch, id: op.id };
+                next.blocks[i] = { ...next.blocks[i], ...op.patch, ...(op.patch.layout ? {layout:{...next.blocks[i].layout,...op.patch.layout}} : {}), id: op.id };
             }
             if (op.op === 'removeBlock')
                 next.blocks = next.blocks.filter(b => b.id !== op.id);
+            if (op.op === 'setEdges') { assert(Array.isArray(op.value)&&op.value.every(e=>next.blocks.some(b=>b.id===e.source)&&next.blocks.some(b=>b.id===e.target)), 'Invalid edge endpoints'); next.edges = op.value; }
+            if (op.op === 'setLayout') next.layoutMode = op.value;
+            if (op.op === 'reorderBlocks') { assert(Array.isArray(op.ids) && op.ids.length === next.blocks.length && new Set(op.ids).size === next.blocks.length && op.ids.every(id=>next.blocks.some(b=>b.id===id)), 'Invalid block order'); next.blocks = op.ids.map(id=>next.blocks.find(b=>b.id===id)); }
             if (op.op === 'setTitle')
                 next.title = op.value;
             if (op.op === 'setMode')
                 next.mode = op.value;
         }
+        next.edges = (next.edges ?? []).filter(e=>next.blocks.some(b=>b.id===e.source)&&next.blocks.some(b=>b.id===e.target));
         this.validateView(next);
         return this.r.update(id, next, { baseRevision });
     }

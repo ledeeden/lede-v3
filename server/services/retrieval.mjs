@@ -107,7 +107,7 @@ export class Retrieval {
             const r = this.r.maybe(c.resource_id);
             // Provider IO yields control: never return obsolete, archived or unlinked hits.
             if (!r || r.status !== 'active' || r.revision !== c.revision || currentIds && !currentIds.has(r.id)) { staleCandidates++; continue; }
-            hits.push({ id: c.id, resourceId: c.resource_id, title: c.title, kind: r.kind, uri: uri(r.kind, r.id, { rev: c.revision, anchor: c.level === 2 && r.kind === 'object' ? c.anchor : undefined }), level: c.level, anchor: c.anchor, revision: c.revision, snippet: c.content.slice(0, 900), score: c.fusionScore, rerankRank: c.rerankRank ?? null, channels: c.channels, source: r.source ?? null, ...includeRelations ? { relations: this.r.related(r.id).filter(e => !currentIds || currentIds.has(e.source) && currentIds.has(e.target)).map(e => ({ source: e.source, target: e.target, type: e.type })) } : {} });
+            hits.push({ id: c.id, resourceId: c.resource_id, title: c.title, kind: r.kind, uri: uri(r.kind, r.id, { rev: c.revision, anchor: c.level === 2 && r.kind === 'object' ? c.anchor : undefined }), level: c.level, anchor: c.anchor, revision: c.revision, snippet: c.content.slice(0, 900), score: c.fusionScore, rerankRank: c.rerankRank ?? null, channels: c.channels, source: r.source ?? null, locator:r.blocks?.find(b=>b.id===c.anchor)?.locator??null, ...includeRelations ? { relations: this.r.related(r.id).filter(e => !currentIds || currentIds.has(e.source) && currentIds.has(e.target)).map(e => ({ source: e.source, target: e.target, type: e.type })) } : {} });
             contexts.push({ ...hits.at(-1), snippet: c.content });
             if (hits.length === limit)
                 break;

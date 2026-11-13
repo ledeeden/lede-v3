@@ -24,9 +24,9 @@ test('Large tool outputs spill durably, remain URI-readable and do not inflate m
     assert.equal(text, a.s.get('SELECT body FROM tool_outputs WHERE call_key=?', row.id).body);
     assert.ok(a.kernel.history(a.s.get('SELECT id FROM sessions WHERE bot_id=?', p.leadBotId).id).some(m => m.role === 'tool' && m.content.includes(preview.uri)));
 });
-test('Context compaction uses complete step boundaries inside a running turn and keeps recent user wording', async (t) => {
+test('Context compaction selects a token-budgeted paired tail and keeps recent user wording', async (t) => {
     const peer = await modelFixture(t, { respond: () => ({ content: '压缩摘要：保留目标、结果 URI 和未完成事项。' }) });
-    const a = await fixture(t, { providerConfig: { ...peer.config, chat: { ...peer.config.chat, contextWindow: 8192, maxTokens: 1024 } } });
+    const a = await fixture(t, { providerConfig: { ...peer.config, chat: { ...peer.config.chat, contextWindow: 16000, maxTokens: 1024, compaction: { retainTokens: 5000 } } } });
     const p = createProject(a.r, { title: '长会话' }), bot = a.r.get(p.leadBotId), ss = a.coordinator.session(bot.id, p.id);
     a.s.sessionEvent(ss.id, 'user/message', { content: '原话必须保留：不发广告。', source: { kind: 'user' } }, 1, 0);
     for (let step = 1; step <= 5; step++) {
@@ -39,7 +39,7 @@ test('Context compaction uses complete step boundaries inside a running turn and
     const history = a.kernel.history(ss.id), checkpoint = a.s.get('SELECT * FROM sessions WHERE id=?', ss.id);
     assert.ok(checkpoint.checkpoint_seq > 0);
     assert.ok(checkpoint.checkpoint.includes('原话必须保留：不发广告。'));
-    assert.equal(history.filter(m => m.role === 'assistant').length, 2);
+    assert.equal(history.filter(m => m.role === 'assistant').length, 4); // Pruned results allow more complete pairs in the same tail budget.
     const callIds = history.filter(m => m.role === 'assistant').flatMap(m => m.tool_calls.map(c => c.id));
     assert.deepEqual(history.filter(m => m.role === 'tool').map(m => m.tool_call_id), callIds);
     assert.equal(peer.calls.length, 1);

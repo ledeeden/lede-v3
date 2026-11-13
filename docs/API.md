@@ -101,3 +101,20 @@ lede://run/run_<uuid>#tool%3Drun_<uuid>%3A1%3Acall_id
 passages 含 uri/resourceId/revision/anchor/level/title/source/role/via/text/truncated，
 role 为 hit/neighbor/reference，仅用于说明文本如何进入上下文，不表示证据评级。
 向量检索与重排可能进行外部模型 IO，Agent 工具按 external 记账，支持运行取消。
+
+## 设计扩展 API（2026-11-13）
+
+- `POST /api/asset/upload?name=...&projectId=...`：raw body、正确 Content-Type、X-Lede-Token，100 MB 上限。返回 object。
+- `GET|HEAD /api/asset/:id`：X-Lede-Token 或媒体 URL token 参数；支持单段 bytes Range。
+- `POST /api/annotation`：id/baseRevision/request_id + selector/text，或 remove=annotationId；selector 为 region{x,y,width,height}（归一化）、page{page}、time{start}、block{blockId}。
+- `POST /api/asset/extracted`：id/baseRevision/segments/method；段落包含 text，可带实际 page 或 start。
+- `POST /api/asset/process`：id/baseRevision，返回后台 job；图片走视觉模型，音视频走独立 transcription 配置。任务失败不写伪结果。
+- `GET /api/references?id=...`：incoming/outgoing。`POST /api/reference`：sourceId/baseRevision/request_id/targetUri/sourceAnchor?/excerpt?；remove=true + citationId 删除当前引用。
+- `GET /api/activity?projectId=...`：最近 300 条持久工作事件。`GET /api/board?projectId=...`：项目目标、事项、任务和待确认卡。
+- `GET /api/chat` 可传 botId；`POST /api/chat` 可传 targetBotId 和 options{model,effort,mode:read|execute}。
+- view.patch 增加 setLayout、setEdges、reorderBlocks；updateBlock 支持 hidden 与 layout 的局部合并。
+- Agent Tools：knowledge.cite、knowledge.references、knowledge.annotate、knowledge.extract_media。引用本身不引入立场判断。
+
+图像接口依据 [Chat Completions 图像输入](https://developers.openai.com/api/docs/guides/images-vision?api-mode=chat)，转写接口依据 [Audio Transcriptions](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)。兼容服务可能支持不同格式，设置可选 json / verbose_json，未返回时间戳时不会伪造时间戳。
+
+原件上传也接受 DOCX/XLSX/PPTX/ZIP，按扩展名选择受限本地解析。未知二进制保留为下载文件；非媒体响应强制 attachment，不在应用同源执行上传的 HTML/脚本。

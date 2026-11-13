@@ -1,0 +1,8 @@
+import {esc,md} from './api.mjs';
+export function documentHTML(x){const p=x.preview??{type:'file'};if(p.type==='archive')return `<div class="table-scroll"><table><thead><tr><th>文件</th><th>大小</th></tr></thead><tbody>${p.entries.map(e=>`<tr><td>${esc(e.name)}</td><td>${esc(e.size.toLocaleString())} bytes</td></tr>`).join('')}</tbody></table></div>`;
+ if(p.type==='sheet')return `<div class="sheet-reader">${p.sheets.map(s=>{const columns=[...new Set(s.rows.flatMap(r=>r.cells.map(c=>c.ref?.replace(/\d/g,'')??'')))].sort((a,b)=>a.length-b.length||a.localeCompare(b));return `<details open><summary>${esc(s.name)}</summary><div class="table-scroll"><table><thead><tr><th></th>${columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${s.rows.map(r=>`<tr><th>${esc(r.number)}</th>${columns.map(col=>{const c=r.cells.find(c=>c.ref===col+r.number);return `<td title="${esc(c?.formula?'='+c.formula:'')}">${esc(c?.value??'')}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div></details>`;}).join('')}<p class="small muted">显示文件中保存的单元格值；公式不会在这里重新计算。</p></div>`;
+ if(p.type==='slides')return `<div class="slide-reader">${p.slides.map(s=>`<section class="card slide-page"><span class="mono muted">${esc(s.number)}</span><div class="markdown">${md(s.text)}</div></section>`).join('')}</div>`;
+ if(p.type==='code')return `<div class="code-reader"><span class="pill">${esc(p.language)}</span><pre>${esc(x.content)}</pre></div>`;
+ if(p.type==='document')return `<div class="markdown document-reader">${md(x.content)}</div>`;
+ return `<div class="file-reader"><span>${esc(x.asset.name)}</span><p class="mono muted">${esc(x.asset.size.toLocaleString())} bytes · ${esc(x.asset.mime)}</p><p>此格式可下载原件。</p></div>`;
+}

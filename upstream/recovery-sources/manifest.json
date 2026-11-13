@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "39163dd30f703a79079e2d2446545cff3c453738",
+  "license": "MIT",
+  "modified": "Lede SQLite and Chat Completions recovery adapter",
+  "files": [
+    {
+      "path": "packages/compaction/compaction-basic/src/index.ts",
+      "blobSha": "dc361d8f5e2c10db3bf1ee142b4d5aadaa17ae0b"
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/config.ts",
+      "blobSha": "3792d9694a5cc494407b03b3fb054a52d0a951d7"
+    },
+    {
+      "path": "packages/compaction/compaction-basic/src/summarizer.ts",
+      "blobSha": "c9184d1ed48e4da3c2f2b8e53c6328fa78e9ea0a"
+    },
+    {
+      "path": "packages/compaction/compaction-tool-result-pruner/src/index.ts",
+      "blobSha": "5f536bfc9b9848d2de0c807c9c8d255cd45914b8"
+    },
+    {
+      "path": "packages/compaction/compaction-tool-result-pruner/src/config.ts",
+      "blobSha": "3a2a376ea3a15ffadb9fd9aa542a2e2380a09fcb"
+    },
+    {
+      "path": "packages/core/agent-loop/src/agent.ts",
+      "blobSha": "7ec43dd1323edc6e2b488d7c9d35fdd2d323abbd"
+    }
+  ]
+}

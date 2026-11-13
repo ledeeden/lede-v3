@@ -1,0 +1,10 @@
+import {summarize} from '../tools.mjs';
+import {hash,now} from '../db.mjs';
+export class ResearchSummaries {
+ constructor(s,r,providers){Object.assign(this,{s,r,providers});this.abort=new AbortController();this.pending=new Set();this.running=null;this.listener=e=>{if(['resource.created','resource.updated'].includes(e.topic)){this.pending.add(e.resourceId);this.schedule();}};s.events.on('event',this.listener);}
+ eligible(x){if(!x||x.kind!=='object'||!x.content?.trim()||!x.producedBy||x.status!=='active')return false;const run=this.s.get('SELECT bot_id,project_id FROM runs WHERE id=?',x.producedBy);const p=run&&this.r.maybe(run.project_id);return !!p&&p.leadBotId!==run.bot_id;}
+ schedule(){if(this.timer||this.running||this.abort.signal.aborted)return;this.timer=setTimeout(()=>{this.timer=null;this.running=this.drain().finally(()=>{this.running=null;if(this.pending.size)this.schedule();});},50);this.timer.unref?.();}
+ async drain(){while(this.pending.size&&!this.abort.signal.aborted){const id=this.pending.values().next().value;this.pending.delete(id);const x=this.r.maybe(id);if(!this.eligible(x)||!this.providers.configured('chat')||x.summary&&!x.summary.stale)continue;const signature=this.r.signature(id),jobId='summary_'+hash([id,signature]);if(this.s.get('SELECT id FROM jobs WHERE id=?',jobId))continue;this.s.run('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?)',jobId,'research-summary',id,'running',JSON.stringify({sourceSignature:signature}),null,now(),now());try{await summarize({id,r:this.r,providers:this.providers,signal:this.abort.signal});this.s.run("UPDATE jobs SET state='succeeded',updated_at=? WHERE id=?",now(),jobId);}catch(e){this.s.run("UPDATE jobs SET state='failed',error=?,updated_at=? WHERE id=?",this.providers.redact(e.message),now(),jobId);}this.s.event('summary.finished',id,{jobId});}}
+ recover(){for(const x of this.r.all({kind:'object'}))if(this.eligible(x)&&(!x.summary||x.summary.stale))this.pending.add(x.id);this.schedule();}
+ async close(){this.s.events.off('event',this.listener);clearTimeout(this.timer);this.abort.abort();await this.running;}
+}
