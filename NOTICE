@@ -1,0 +1,27 @@
+Lede Project Workspace v0.3
+
+This distribution contains modified, selected algorithmic portions from:
+
+DeepSeek Harness
+Copyright (c) 2026 DeepSeek
+Licensed under the MIT License. Full text: licenses/DeepSeek-MIT.txt.
+Modified files: server/runtime/inbox.mjs and server/runtime/kernel.mjs.
+
+DS Bot
+Copyright 2026 Fei2411 and the DS Bot contributors
+Licensed under the Apache License, Version 2.0.
+Full text: licenses/DS-Bot-Apache-2.0.txt.
+Modified/adapted files: server/runtime/requests.mjs, handoffs.mjs and coordinator.mjs.
+
+The full DeepSeek Harness or DS Bot applications are not included. Original
+names are used for source attribution, not endorsement. Exact revisions,
+source paths and modifications are documented in docs/UPSTREAM.md and
+upstream/manifest.json.
+
+TypeScript 5.8.3
+Copyright (c) Microsoft Corporation. All rights reserved.
+Apache License 2.0. Full text: licenses/TypeScript-LICENSE.txt.
+Only the compiler runtime in vendor/typescript.cjs is distributed.
+
+Design assets were exported read-only from the user's supplied Figma file.
+See web/public/assets/PROVENANCE.md. No font files are distributed.

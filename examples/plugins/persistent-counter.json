@@ -1,0 +1,12 @@
+{
+  "manifest": {
+    "id": "example.counter",
+    "version": "1.0.0",
+    "name": "持久化交互示例",
+    "description": "展示 sdk.state、sdk.setState 和选择回传。不是业务数据写入工具。",
+    "entry": "index.ts",
+    "propsSchema": {"type":"object","properties":{"title":{"type":"string","default":"交互计数器"}},"additionalProperties":false},
+    "capabilities": ["state", "selection", "resize"]
+  },
+  "source": "export default function mount(root, props, sdk) { let count = Number(sdk.state.count || 0); const button = h('button', {onclick: () => { count += 1; button.textContent = '计数 ' + count; sdk.setState({count}); sdk.select({key:'counter',excerpt:'用户计数：' + count,resourceIds:[]}); }}, '计数 ' + count); root.append(h('h3',{},props.title || '交互计数器'),button); return () => root.replaceChildren(); }"
+}

@@ -1,0 +1,1 @@
+Icons exported read-only from user Figma file roN4ySdKkS8eYopaKXkyFD, v0.3 page 76:1809, Sidebar 76:1810 and project frame 77:2091. Paths preserved; redundant enclosing clipPath removed where bounds already contain strokes. Fonts are system fallbacks; no font files included.

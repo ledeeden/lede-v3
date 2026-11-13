@@ -1,0 +1,199 @@
+{
+  "formatVersion": 1,
+  "date": "2026-11-13",
+  "mode": "selected-source-logic adaptation; not full upstream packages",
+  "deepseekHarness": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness",
+    "commit": "e8f7b93a344964de3dca1ace9e72b6e4d6de87cb",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "packages/core/agent-loop/src/inbox.ts",
+        "blob": "affe0c6b2f653888dc2177fd2987c6082a93f758",
+        "read": "full",
+        "target": "server/runtime/inbox.mjs",
+        "logic": [
+          "normalized splice",
+          "two-target inbox",
+          "unique pending IDs",
+          "claim and replay"
+        ]
+      },
+      {
+        "path": "packages/core/agent-loop/src/agent.ts",
+        "read": "lines 300–720 (turn/step focus)",
+        "target": "server/runtime/kernel.mjs",
+        "logic": [
+          "turn-step lifecycle",
+          "durable message and tool ordering",
+          "cancellation",
+          "truncation and paired tool results",
+          "no built-in turn step budget"
+        ],
+        "modified": true
+      },
+      {
+        "path": "packages/llm/token-meter/src/usage-projection.ts",
+        "blob": "52268889ec9528fc3298d4221d36ffb5049de0a2",
+        "read": "usage-related functions; full token-meter files",
+        "target": "server/services/usage.mjs",
+        "logic": [
+          "last usage sample replaces previous",
+          "retry attempts count separately"
+        ],
+        "modified": true
+      },
+      {
+        "path": "packages/llm/token-meter/src/turn-usage.ts",
+        "blob": "56c1adc54bca2673d563da9d4313b5fed2ec6d21",
+        "read": "usage-related functions; full token-meter files",
+        "target": "shared/usage.mjs",
+        "logic": [
+          "nonnegative safe integer validation",
+          "missing optional fields remain unknown",
+          "reasoning is an output subset"
+        ],
+        "modified": true
+      },
+      {
+        "path": "packages/llm/llm-deepseek/src/translate.ts",
+        "blob": "deb901119ee8308f2fe1420222dda0ffdf6b7cbf",
+        "read": "usage-related functions; full token-meter files",
+        "target": "server/services/providers.mjs",
+        "logic": [
+          "cumulative usage replacement",
+          "single terminal sample"
+        ],
+        "modified": true
+      },
+      {
+        "path": "packages/guard/repeat-tool-reminder/src/index.ts",
+        "read": "full",
+        "target": "server/runtime/repeat-tool-reminder.mjs",
+        "modified": true,
+        "logic": [
+          "canonical exact argument matching",
+          "per-session consecutive chains",
+          "advisory thresholds 3/5/8",
+          "human input reset",
+          "durable reminders after tool batch"
+        ]
+      }
+    ]
+  },
+  "dsBot": {
+    "repository": "https://github.com/Fei2411/DS-Bot",
+    "commit": "a66cc737cfb6c3d8a2597e748cded6cab1206dd3",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "ds-bot/src/host/requests.js",
+        "blob": "d153e4742d78d73de4122ed4ecdc76a50ded5e05",
+        "read": "full",
+        "target": "server/runtime/requests.mjs",
+        "logic": [
+          "scoped identity",
+          "fingerprint",
+          "pending-before-send",
+          "dedup replay",
+          "uncertain"
+        ]
+      },
+      {
+        "path": "ds-bot/src/host/handoffs.js",
+        "blob": "d0725e71be41a56cec156b47d47865ee6e54251f",
+        "read": "lines 65–280 (core functions)",
+        "target": "server/runtime/handoffs.mjs",
+        "logic": [
+          "parent-child work",
+          "hold",
+          "consume-before-settle",
+          "ancestor guard",
+          "return and wake"
+        ]
+      },
+      {
+        "path": "ds-bot/src/host/delivery.js + roster.js + turns.js",
+        "read": "reference design and earlier inspected excerpts; not full-file extraction",
+        "target": "server/runtime/coordinator.mjs",
+        "logic": [
+          "long-lived identity",
+          "session mapping",
+          "now/queue delivery"
+        ]
+      },
+      {
+        "path": "ds-bot/src/host/memory-review.js",
+        "blob": "dbd863c4b6883466da6ae150aa3e0755a570237a",
+        "read": "review, entry validation, and handoff package design excerpts",
+        "target": "server/services/memory.mjs",
+        "modified": true
+      },
+      {
+        "path": "ds-bot/src/host/memory-entries.js",
+        "blob": "904cd260d32e87d0bf50cb0a3e3b4579c340ac3d",
+        "read": "review, entry validation, and handoff package design excerpts",
+        "target": "server/services/memory.mjs",
+        "modified": true
+      },
+      {
+        "path": "ds-bot/src/host/goals.js",
+        "blob": "9b7db4be5d1886b61f9ef26773697284666c7e2c",
+        "read": "goal state transitions and idle driver excerpts",
+        "target": "server/runtime/project-continuity.mjs",
+        "modified": true
+      },
+      {
+        "path": "ds-bot/src/host/parts.js",
+        "blob": "c0622c37aa35cc668c169b2ab8eae04a2b6d6ea5",
+        "read": "review, entry validation, and handoff package design excerpts",
+        "target": "server/runtime/project-continuity.mjs",
+        "modified": true
+      }
+    ]
+  },
+  "vendor": {
+    "typescript": {
+      "version": "5.8.3",
+      "path": "vendor/typescript.cjs",
+      "license": "Apache-2.0",
+      "sha256": "dd17428736a07e1db1a138d8a14295ddb2699ba780ee15038acdd2c6da5373a0"
+    }
+  },
+  "figma": {
+    "fileKey": "roN4ySdKkS8eYopaKXkyFD",
+    "page": "76:1809",
+    "version": "v0.3",
+    "frames": [
+      "77:1809",
+      "77:2091",
+      "78:1971",
+      "78:2308",
+      "81:2133",
+      "81:2349",
+      "82:2287",
+      "82:2533",
+      "84:2451"
+    ],
+    "originalFileModified": false,
+    "usageFrames": [
+      "92:3075",
+      "92:3588",
+      "93:3243",
+      "93:3609",
+      "94:3419",
+      "94:3556"
+    ]
+  },
+  "notIncluded": [
+    "DSH product shell",
+    "Cordis runtime",
+    "DS-Bot group UI",
+    "native Agent Teams",
+    "PTC",
+    "ACP",
+    "MCP transport",
+    "external CLI Agent adapters",
+    "font files"
+  ]
+}

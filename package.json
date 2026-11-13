@@ -1,0 +1,28 @@
+{
+  "name": "lede-project-workspace",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "start": "node scripts/launch.mjs --no-open",
+    "demo": "node scripts/launch.mjs --demo",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "test:ui": "python3 tests/ui.test.py",
+    "test:all": "npm run check && npm test && npm run test:ui"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@xyflow/react": "12.12.1",
+    "pdfjs-dist": "6.5.438",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2"
+  }
+}

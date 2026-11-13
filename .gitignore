@@ -1,0 +1,13 @@
+.data/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+providers.json
+output/
+*.log
+node_modules/
+tests/artifacts/
+.DS_Store
